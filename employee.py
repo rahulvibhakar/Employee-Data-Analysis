@@ -7,11 +7,15 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import classification_report
+from sklearn.linear_model import LogisticRegression, LinearRegression
+from sklearn.metrics import mean_absolute_error, mean_squared_error, roc_auc_score, roc_curve
 import seaborn as sns
+import folium
+from scipy.stats import kurtosis, skew
 
 # Load data
 def load_data():
-    file_path = 'mock_employee_data.csv'
+    file_path = 'Employee.xlsx'
     try:
         df = pd.read_excel(file_path, sheet_name="Employee Sample Data")
         return df
@@ -36,7 +40,9 @@ option = st.sidebar.selectbox("Select Analysis Type:", [
     "Visualization",
     "Clustering",
     "Churn Prediction",
-    "Attrition Analysis"
+    "Attrition Analysis",
+    "Turnover Probability",
+    "Salary Prediction",
 ])
 
 # Filter options
@@ -58,6 +64,20 @@ if option == "Overview":
     st.write(filtered_data.head())
     st.write("*Dataset Summary:*")
     st.write(filtered_data.describe())
+
+    # Advanced statistics (Skewness, Kurtosis)
+    st.write("*Advanced Summary Statistics:*")
+    numeric_columns = filtered_data.select_dtypes(include=["number"]).columns
+
+    for col in numeric_columns:
+        st.write(f"{col}:")
+        st.write(f"Skewness: {skew(filtered_data[col].dropna()):.2f}")
+        st.write(f"Kurtosis: {kurtosis(filtered_data[col].dropna()):.2f}")
+
+    # Percentile ranges for numeric columns
+    st.write("*Percentile Distribution:*")
+    percentiles = filtered_data[numeric_columns].quantile([0.25, 0.5, 0.75])
+    st.write(percentiles)
 
 elif option == "Visualization":
     st.header("Data Visualization")
@@ -174,17 +194,79 @@ elif option == "Attrition Analysis":
 
     # Heatmap of correlations
     st.subheader("Correlation Heatmap")
-
-    # Select only numeric columns for correlation
     numeric_columns = filtered_data.select_dtypes(include=['number']).columns
-
-    # Drop non-numeric columns
     filtered_data_numeric = filtered_data[numeric_columns]
-
-    # Calculate the correlation matrix
     corr = filtered_data_numeric.corr()
 
-    # Plot the heatmap
     fig, ax = plt.subplots(figsize=(10, 6))
     sns.heatmap(corr, annot=True, cmap="coolwarm", ax=ax)
     st.pyplot(fig)
+
+elif option == "Turnover Probability":
+    st.header("Employee Turnover Probability")
+
+    if "Churn" in filtered_data.columns and "Age" in filtered_data.columns and "Annual Salary" in filtered_data.columns:
+        features = ["Age", "Annual Salary", "Bonus %"]
+        df_model = filtered_data[features + ["Churn"]].dropna()
+
+        X = df_model[features]
+        y = df_model["Churn"]
+
+        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+
+        model = LogisticRegression(random_state=42)
+        model.fit(X_train, y_train)
+
+        y_pred = model.predict(X_test)
+        y_prob = model.predict_proba(X_test)[:, 1]  # Probabilities for the positive class
+
+        st.write("Logistic Regression Model")
+        st.text(classification_report(y_test, y_pred))
+
+        # ROC Curve
+        fpr, tpr, _ = roc_curve(y_test, y_prob)
+        auc = roc_auc_score(y_test, y_prob)
+
+        fig, ax = plt.subplots()
+        ax.plot(fpr, tpr, color="blue", label=f"AUC = {auc:.2f}")
+        ax.plot([0, 1], [0, 1], color="gray", linestyle="--")
+        ax.set_xlabel("False Positive Rate")
+        ax.set_ylabel("True Positive Rate")
+        ax.set_title("ROC Curve for Turnover Prediction")
+        st.pyplot(fig)
+    else:
+        st.warning("Required columns for turnover prediction are missing.")
+
+elif option == "Salary Prediction":
+    st.header("Employee Salary Prediction")
+
+    if "Annual Salary" in filtered_data.columns and "Age" in filtered_data.columns and "Department" in filtered_data.columns:
+        features = ["Age", "Bonus %", "Department"]
+        df_model = filtered_data[features + ["Annual Salary"]].dropna()
+
+        df_model["Department"] = df_model["Department"].astype("category").cat.codes
+
+        X = df_model[features]
+        y = df_model["Annual Salary"]
+
+        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+
+        model = LinearRegression()
+        model.fit(X_train, y_train)
+
+        y_pred = model.predict(X_test)
+
+        st.write("Regression Model Metrics")
+        st.write(f"Mean Absolute Error: {mean_absolute_error(y_test, y_pred):.2f}")
+        st.write(f"Mean Squared Error: {mean_squared_error(y_test, y_pred):.2f}")
+        st.write(f"R2 Score: {model.score(X_test, y_test):.2f}")
+
+        fig, ax = plt.subplots()
+        ax.scatter(y_test, y_pred, color='purple', alpha=0.6)
+        ax.plot([min(y_test), max(y_test)], [min(y_test), max(y_test)], color='red', linestyle='--')
+        ax.set_xlabel("Actual Salary")
+        ax.set_ylabel("Predicted Salary")
+        ax.set_title("Predicted vs Actual Salary")
+        st.pyplot(fig)
+    else:
+        st.warning("Required columns for salary prediction are missing.")
