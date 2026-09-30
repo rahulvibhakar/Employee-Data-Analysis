@@ -1,4 +1,3 @@
-```markdown
 # Employee Data Analysis
 
 A Streamlit-based employee analytics dashboard that helps explore workforce data, visualize trends, and predict key outcomes such as churn, turnover probability, and salary.
@@ -132,4 +131,3 @@ This project is intended for educational and analytical purposes.
 ## Author
 
 Rahul Vibhakar
-```
